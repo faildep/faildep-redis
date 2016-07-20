@@ -1,4 +1,4 @@
-package go_resilient_redis_test
+package redis
 
 import "testing"
 

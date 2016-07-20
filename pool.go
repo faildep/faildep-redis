@@ -1,4 +1,4 @@
-package go_resilient_redis
+package redis
 
 import (
 	"fmt"

@@ -1,38 +1,38 @@
-package go_resilient_redis
+package redis
 
 import (
-	"github.com/lysu/slb"
+	"github.com/faildep/faildep"
 	"time"
 )
 
-type ResilientRedis struct {
-	pool *redisPool
-	lb   *slb.LoadBalancer
+type FailDepRedis struct {
+	pool    *redisPool
+	failDep *faildep.FailDep
 }
 
-func NewResilientRedis(servers []string, conf RedisConfig) (*ResilientRedis, error) {
+func NewFailDepRedis(servers []string, conf RedisConfig) (*FailDepRedis, error) {
 	p, err := newRedisPool(servers, conf.Basis)
 	if err != nil {
 		return nil, err
 	}
-	l := slb.NewLoadBalancer(servers,
-		slb.WithBulkhead(conf.Resilient.ActiveReqThreshold, conf.Resilient.ActiveReqCountWindow),
-		slb.WithCircuitBreaker(
+	f := faildep.NewFailDep(servers,
+		faildep.WithBulkhead(conf.Resilient.ActiveReqThreshold, conf.Resilient.ActiveReqCountWindow),
+		faildep.WithCircuitBreaker(
 			conf.Resilient.SuccessiveFailThreshold, conf.Resilient.TrippedBaseTime,
-			conf.Resilient.TrippedTimeoutMax, slb.DecorrelatedJittered,
+			conf.Resilient.TrippedTimeoutMax, faildep.DecorrelatedJittered,
 		),
-		slb.WithRetry(
+		faildep.WithRetry(
 			conf.Resilient.MaxServerPick, 1, 0*time.Millisecond,
-			conf.Resilient.RetryMaxInterval, slb.DecorrelatedJittered,
+			conf.Resilient.RetryMaxInterval, faildep.DecorrelatedJittered,
 		),
 	)
-	return &ResilientRedis{pool: p, lb: l}, nil
+	return &FailDepRedis{pool: p, failDep: f}, nil
 }
 
-func (r *ResilientRedis) Do(commandName string, args ...interface{}) (interface{}, error) {
+func (r *FailDepRedis) Do(commandName string, args ...interface{}) (interface{}, error) {
 	var reply interface{}
-	err := r.lb.Submit(func(node *slb.Node) error {
-		instance, err := r.pool.get(node.Server)
+	err := r.failDep.Do(func(res *faildep.Resource) error {
+		instance, err := r.pool.get(res.Server)
 		if err != nil {
 			return err
 		}
